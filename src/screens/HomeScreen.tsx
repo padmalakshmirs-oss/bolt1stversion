@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, TrendingUp, Home, User } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
+import { supabase } from '../lib/supabase';
 import { getTrendingSongs, getRecommendations, getActivityFeed, getUserLogs } from '../lib/database';
 import SongCard from '../components/SongCard';
 
@@ -13,12 +14,80 @@ export function HomeScreen() {
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
   const [userLogs, setUserLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     if (user) {
-      loadData();
+      initializeApp();
     }
   }, [user]);
+
+  useEffect(() => {
+    const subscription = supabase
+      .channel('logs')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'logs'
+      }, async (payload) => {
+        try {
+          const { data: log } = await supabase
+            .from('logs')
+            .select('*, song:songs(*), user:users(*)')
+            .eq('id', payload.new.id)
+            .single();
+          if (log) {
+            setActivityFeed(prev => [log, ...prev]);
+          }
+        } catch (err) {
+          console.error('Error fetching new log:', err);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  async function initializeApp() {
+    try {
+      const { count } = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/songs?select=id&count=exact&head=true`,
+        {
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          }
+        }
+      ).then(r => r.json()).catch(() => ({ count: 0 }));
+
+      if (count === 0 || count === null) {
+        setSeeding(true);
+        try {
+          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/seed-database`;
+          await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({}),
+          });
+
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (err) {
+          console.error('Seeding error:', err);
+        }
+        setSeeding(false);
+      }
+
+      await loadData();
+    } catch (error) {
+      console.error('Error initializing app:', error);
+      setLoading(false);
+    }
+  }
 
   async function loadData() {
     try {
@@ -40,6 +109,24 @@ export function HomeScreen() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (seeding) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center gap-6">
+        <h1 className="font-heading text-4xl text-text-primary">SOUNDLOG</h1>
+        <p className="text-text-muted font-body">Setting up your music world...</p>
+        <div className="flex gap-2">
+          {[0, 1, 2].map(i => (
+            <div
+              key={i}
+              className="w-2 h-2 rounded-full bg-accent-primary animate-pulse"
+              style={{ animationDelay: `${i * 0.2}s` }}
+            />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (loading) {

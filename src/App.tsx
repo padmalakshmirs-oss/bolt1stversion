@@ -24,6 +24,28 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" />;
 }
 
+function OnboardingRoute({ children }: { children: React.ReactNode }) {
+  const { user, profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
+        <p className="text-text-muted font-body">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  if (profile?.onboarding_complete) {
+    return <Navigate to="/home" />;
+  }
+
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -31,10 +53,10 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginScreen />} />
           <Route path="/signup" element={<SignupScreen />} />
-          <Route path="/onboarding/language" element={<ProtectedRoute><OnboardingLanguage /></ProtectedRoute>} />
-          <Route path="/onboarding/era" element={<ProtectedRoute><OnboardingEra /></ProtectedRoute>} />
-          <Route path="/onboarding/directors" element={<ProtectedRoute><OnboardingDirectors /></ProtectedRoute>} />
-          <Route path="/onboarding/artists" element={<ProtectedRoute><OnboardingArtists /></ProtectedRoute>} />
+          <Route path="/onboarding/language" element={<OnboardingRoute><OnboardingLanguage /></OnboardingRoute>} />
+          <Route path="/onboarding/era" element={<OnboardingRoute><OnboardingEra /></OnboardingRoute>} />
+          <Route path="/onboarding/directors" element={<OnboardingRoute><OnboardingDirectors /></OnboardingRoute>} />
+          <Route path="/onboarding/artists" element={<OnboardingRoute><OnboardingArtists /></OnboardingRoute>} />
           <Route path="/home" element={<ProtectedRoute><HomeScreen /></ProtectedRoute>} />
           <Route path="/search" element={<ProtectedRoute><SearchScreen /></ProtectedRoute>} />
           <Route path="/song/:id" element={<ProtectedRoute><SongDetailScreen /></ProtectedRoute>} />

@@ -4,6 +4,7 @@ import { ArrowLeft, Music, Star, MessageSquare, ExternalLink } from 'lucide-reac
 import { useAuth } from '../lib/auth-context';
 import { getSongById, createLog, createReview, getSongReviews } from '../lib/database';
 import { analyzeSentiment, analyzeToxicity } from '../lib/sentiment';
+import { getTrackInfo } from '../lib/lastfm';
 import { AudioPlayer } from '../components/AudioPlayer';
 
 export function SongDetailScreen() {
@@ -12,6 +13,7 @@ export function SongDetailScreen() {
   const { user } = useAuth();
   const [song, setSong] = useState<any>(null);
   const [reviews, setReviews] = useState<any[]>([]);
+  const [lastfmData, setLastfmData] = useState<any>(null);
   const [showLogModal, setShowLogModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -28,6 +30,15 @@ export function SongDetailScreen() {
 
       const reviewsData = await getSongReviews(id!, 20);
       setReviews(reviewsData);
+
+      try {
+        const lastfmInfo = await getTrackInfo(songData.artist_name, songData.title);
+        if (lastfmInfo?.track) {
+          setLastfmData(lastfmInfo.track);
+        }
+      } catch (err) {
+        console.error('Error fetching Last.fm data:', err);
+      }
     } catch (error) {
       console.error('Error loading song:', error);
     } finally {
@@ -100,7 +111,29 @@ export function SongDetailScreen() {
               <p className="text-text-muted font-body text-sm">
                 <span className="text-text-very">Total Logs:</span> {song.total_logs || 0}
               </p>
+
+              {lastfmData?.playcount && (
+                <p className="text-text-very font-body text-sm italic">
+                  Played {(parseInt(lastfmData.playcount) / 1000000).toFixed(1)}M times globally
+                </p>
+              )}
             </div>
+
+            {lastfmData?.toptags?.tag && lastfmData.toptags.tag.length > 0 && (
+              <div className="mb-6">
+                <p className="text-text-muted font-body text-xs mb-2">Community Tags</p>
+                <div className="flex flex-wrap gap-2">
+                  {lastfmData.toptags.tag.slice(0, 6).map((tag: any) => (
+                    <span
+                      key={tag.name}
+                      className="bg-bg-card border border-border-primary text-text-muted px-2 py-1 rounded-full text-xs font-body"
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-4">
               <button
