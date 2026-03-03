@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { searchSpotify, getTrack, getAudioFeatures, getArtist } from './spotify';
+import { searchSpotify, getTrack, getAudioFeatures, getArtist, getSpotifyToken } from './spotify';
 import { getTopTracksByTag, getTrackInfo } from './lastfm';
 
 export async function getSongs(limit: number = 20, offset: number = 0) {
@@ -255,4 +255,74 @@ export async function getFollowing(userId: string) {
 
   if (error) throw error;
   return data?.map(f => f.following) || [];
+}
+
+export async function seedDatabase() {
+  console.log('Seeding database...');
+
+  const languages = [
+    { tag: 'tamil', lang: 'Tamil' },
+    { tag: 'hindi', lang: 'Hindi' },
+    { tag: 'telugu', lang: 'Telugu' },
+    { tag: 'malayalam', lang: 'Malayalam' },
+    { tag: 'kannada', lang: 'Kannada' },
+    { tag: 'pop', lang: 'English' },
+  ];
+
+  const token = await getSpotifyToken();
+  console.log('Spotify token ready');
+
+  for (const { tag, lang } of languages) {
+    console.log(`Fetching ${lang} from LastFM...`);
+
+    try {
+      const lfRes = await fetch(
+        `https://ws.audioscrobbler.com/2.0/?method=tag.gettoptracks&tag=${tag}&api_key=${
+          import.meta.env.VITE_LASTFM_API_KEY
+        }&format=json&limit=20`
+      );
+      const lfData = await lfRes.json();
+      const tracks = lfData.tracks?.track || [];
+      console.log(`Got ${tracks.length} tracks for ${lang}`);
+
+      for (const track of tracks.slice(0, 10)) {
+        try {
+          const spRes = await fetch(
+            `https://api.spotify.com/v1/search?q=${encodeURIComponent(
+              track.name + ' ' + track.artist.name
+            )}&type=track&limit=1`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const spData = await spRes.json();
+          const spTrack = spData.tracks?.items[0];
+
+          if (spTrack) {
+            await supabase.from('songs').upsert(
+              {
+                title: spTrack.name,
+                artist_name: spTrack.artists[0].name,
+                artist_id: spTrack.artists[0].id,
+                language: lang,
+                year: parseInt(spTrack.album.release_date?.split('-')[0]) || 2020,
+                album: spTrack.album.name,
+                cover_image: spTrack.album.images[0]?.url,
+                preview_url: spTrack.preview_url,
+                spotify_id: spTrack.id,
+                spotify_url: spTrack.external_urls.spotify,
+                average_rating: parseFloat((Math.random() * 2 + 3).toFixed(1)),
+                total_logs: Math.floor(Math.random() * 500 + 50),
+              },
+              { onConflict: 'spotify_id' }
+            );
+          }
+        } catch (e) {
+          console.error('Track seed error:', e);
+          continue;
+        }
+      }
+    } catch (e) {
+      console.error(`Error fetching ${lang}:`, e);
+    }
+  }
+  console.log('Seed complete');
 }

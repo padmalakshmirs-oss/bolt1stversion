@@ -71,7 +71,12 @@ function OnboardingLanguage() {
     <div className="min-h-screen bg-bg-primary p-6 flex flex-col">
       <div className="flex justify-between items-center mb-8">
         <h2 className="font-heading text-3xl text-text-primary">Step 1 of 4</h2>
-        <button onClick={() => navigate('/home')} className="text-text-muted hover:text-text-primary transition-colors font-body">
+        <button onClick={async () => {
+          if (user) {
+            await supabase.from('users').update({ onboarding_complete: true }).eq('id', user.id);
+          }
+          window.location.href = '/home';
+        }} className="text-text-muted hover:text-text-primary transition-colors font-body">
           Skip
         </button>
       </div>
@@ -153,7 +158,12 @@ function OnboardingEra() {
     <div className="min-h-screen bg-bg-primary p-6 flex flex-col">
       <div className="flex justify-between items-center mb-8">
         <h2 className="font-heading text-3xl text-text-primary">Step 2 of 4</h2>
-        <button onClick={() => navigate('/home')} className="text-text-muted hover:text-text-primary transition-colors font-body">
+        <button onClick={async () => {
+          if (user) {
+            await supabase.from('users').update({ onboarding_complete: true }).eq('id', user.id);
+          }
+          window.location.href = '/home';
+        }} className="text-text-muted hover:text-text-primary transition-colors font-body">
           Skip
         </button>
       </div>
@@ -236,7 +246,12 @@ function OnboardingDirectors() {
     <div className="min-h-screen bg-bg-primary p-6 flex flex-col">
       <div className="flex justify-between items-center mb-8">
         <h2 className="font-heading text-3xl text-text-primary">Step 3 of 4</h2>
-        <button onClick={() => navigate('/onboarding/artists')} className="text-text-muted hover:text-text-primary transition-colors font-body">
+        <button onClick={async () => {
+          if (user) {
+            await supabase.from('users').update({ onboarding_complete: true }).eq('id', user.id);
+          }
+          window.location.href = '/home';
+        }} className="text-text-muted hover:text-text-primary transition-colors font-body">
           Skip
         </button>
       </div>
@@ -319,7 +334,7 @@ function OnboardingArtists() {
   };
 
   async function handleFinish() {
-    if (!user || selected.length < 3) return;
+    if (!user) return;
     setLoading(true);
 
     try {
@@ -366,14 +381,19 @@ function OnboardingArtists() {
 
       <div className="flex gap-4 mt-auto">
         <button
-          onClick={() => navigate('/home')}
+          onClick={async () => {
+            if (user) {
+              await supabase.from('users').update({ onboarding_complete: true }).eq('id', user.id);
+            }
+            window.location.href = '/home';
+          }}
           className="flex-1 border border-border-primary text-text-primary font-body font-semibold py-3 rounded-full transition-all hover:border-accent-primary"
         >
           Skip
         </button>
         <button
           onClick={handleFinish}
-          disabled={loading || selected.length < 3}
+          disabled={loading}
           className="flex-1 bg-accent-primary hover:bg-accent-hover text-text-primary font-body font-semibold py-3 rounded-full transition-all disabled:opacity-50"
         >
           {loading ? 'Finishing...' : 'Finish'}

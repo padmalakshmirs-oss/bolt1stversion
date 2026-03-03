@@ -3,136 +3,157 @@ import { useNavigate } from 'react-router-dom';
 import { Search, TrendingUp, Home, User } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { supabase } from '../lib/supabase';
-import { getTrendingSongs, getRecommendations, getActivityFeed, getUserLogs } from '../lib/database';
+import { seedDatabase } from '../lib/database';
 import SongCard from '../components/SongCard';
 
 export function HomeScreen() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-  const [trending, setTrending] = useState<any[]>([]);
-  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [trendingSongs, setTrendingSongs] = useState<any[]>([]);
+  const [forYouSongs, setForYouSongs] = useState<any[]>([]);
+  const [languageRows, setLanguageRows] = useState<Record<string, any[]>>({});
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
   const [userLogs, setUserLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [seeding, setSeeding] = useState(false);
+  const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
     if (user) {
-      initializeApp();
+      initApp();
     }
   }, [user]);
 
-  useEffect(() => {
-    const subscription = supabase
-      .channel('logs')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'logs'
-      }, async (payload) => {
-        try {
-          const { data: log } = await supabase
-            .from('logs')
-            .select('*, song:songs(*), user:users(*)')
-            .eq('id', payload.new.id)
-            .single();
-          if (log) {
-            setActivityFeed(prev => [log, ...prev]);
-          }
-        } catch (err) {
-          console.error('Error fetching new log:', err);
-        }
-      })
-      .subscribe();
+  async function initApp() {
+    setInitializing(true);
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  async function initializeApp() {
     try {
-      const { count } = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/songs?select=id&count=exact&head=true`,
-        {
-          headers: {
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          }
-        }
-      ).then(r => r.json()).catch(() => ({ count: 0 }));
+      const { count } = await supabase
+        .from('songs')
+        .select('*', { count: 'exact', head: true });
 
-      if (count === 0 || count === null) {
-        setSeeding(true);
-        try {
-          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/seed-database`;
-          await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({}),
-          });
+      console.log('Songs in DB:', count);
 
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        } catch (err) {
-          console.error('Seeding error:', err);
-        }
-        setSeeding(false);
+      if (!count || count === 0) {
+        console.log('Seeding now...');
+        await seedDatabase();
+        console.log('Seed done!');
       }
 
-      await loadData();
-    } catch (error) {
-      console.error('Error initializing app:', error);
-      setLoading(false);
-    }
-  }
-
-  async function loadData() {
-    try {
-      const language = profile?.preferred_languages?.[0] || 'English';
-
-      const [trendingData, recsData, activityData, logsData] = await Promise.all([
-        getTrendingSongs(language),
-        getRecommendations(user!.id),
-        getActivityFeed(user!.id, 10),
-        getUserLogs(user!.id, 10),
-      ]);
-
-      setTrending(trendingData.slice(0, 10));
-      setRecommendations(recsData.slice(0, 10));
-      setActivityFeed(activityData);
-      setUserLogs(logsData);
-    } catch (error) {
-      console.error('Error loading home data:', error);
+      await loadHomeData();
+    } catch (err) {
+      console.error('Init failed:', err);
     } finally {
-      setLoading(false);
+      setInitializing(false);
     }
   }
 
-  if (seeding) {
-    return (
-      <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center gap-6">
-        <h1 className="font-heading text-4xl text-text-primary">SOUNDLOG</h1>
-        <p className="text-text-muted font-body">Setting up your music world...</p>
-        <div className="flex gap-2">
-          {[0, 1, 2].map(i => (
-            <div
-              key={i}
-              className="w-2 h-2 rounded-full bg-accent-primary animate-pulse"
-              style={{ animationDelay: `${i * 0.2}s` }}
-            />
-          ))}
-        </div>
-      </div>
-    );
+  async function loadHomeData() {
+    const langs = profile?.preferred_languages?.length
+      ? profile.preferred_languages
+      : ['Tamil', 'Hindi', 'English'];
+
+    const { data: trending } = await supabase
+      .from('songs')
+      .select('*')
+      .in('language', langs)
+      .order('total_logs', { ascending: false })
+      .limit(10);
+    setTrendingSongs(trending || []);
+
+    const { data: forYou } = await supabase
+      .from('songs')
+      .select('*')
+      .in('language', langs)
+      .order('average_rating', { ascending: false })
+      .limit(12);
+    setForYouSongs(forYou || []);
+
+    const rows: Record<string, any[]> = {};
+    for (const lang of langs.slice(0, 3)) {
+      const { data } = await supabase
+        .from('songs')
+        .select('*')
+        .eq('language', lang)
+        .order('average_rating', { ascending: false })
+        .limit(20);
+      rows[lang] = data || [];
+    }
+    setLanguageRows(rows);
+
+    const { data: logs } = await supabase
+      .from('logs')
+      .select('*, song:songs(*), user:users(*)')
+      .eq('user_id', user!.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    setUserLogs(logs || []);
+
+    const { data: activity } = await supabase
+      .from('logs')
+      .select('*, song:songs(*), user:users(*)')
+      .neq('user_id', user!.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    setActivityFeed(activity || []);
   }
 
-  if (loading) {
+  if (initializing) {
     return (
-      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
-        <p className="text-text-muted font-body">Loading your soundlog...</p>
+      <div
+        style={{
+          background: '#09090B',
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '16px',
+        }}
+      >
+        <div
+          style={{
+            fontFamily: 'Cormorant Garamond',
+            fontSize: '32px',
+            letterSpacing: '0.3em',
+            color: '#FAFAFA',
+          }}
+        >
+          SOUNDLOG
+        </div>
+        <div
+          style={{
+            color: '#71717A',
+            fontSize: '14px',
+            fontFamily: 'DM Sans',
+          }}
+        >
+          Setting up your music world...
+        </div>
+        <div
+          style={{
+            width: '200px',
+            height: '2px',
+            background: '#27272A',
+            borderRadius: '2px',
+            overflow: 'hidden',
+            position: 'relative',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              width: '40%',
+              height: '100%',
+              background: '#8B5CF6',
+              animation: 'slide 1.5s infinite',
+            }}
+          />
+        </div>
+        <style>{`
+          @keyframes slide {
+            0% { left: -40%; }
+            100% { left: 100%; }
+          }
+        `}</style>
       </div>
     );
   }
@@ -163,26 +184,32 @@ export function HomeScreen() {
               See all
             </button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {trending.map((song, idx) => (
-              <SongCard
-                key={song.id}
-                song={song}
-                onClick={() => navigate(`/song/${song.id}`)}
-                badge={`#${idx + 1}`}
-                badgeColor="accent-primary"
-              />
-            ))}
-          </div>
+          {trendingSongs.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {trendingSongs.map((song, idx) => (
+                <SongCard
+                  key={song.id}
+                  song={song}
+                  onClick={() => navigate(`/song/${song.id}`)}
+                  badge={`#${idx + 1}`}
+                  badgeColor="accent-primary"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-bg-card border border-border-primary rounded-lg p-8 text-center">
+              <p className="text-text-muted font-body">No trending songs yet</p>
+            </div>
+          )}
         </section>
 
         <section className="mb-12">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-heading text-2xl text-text-primary">For You</h2>
           </div>
-          {recommendations.length > 0 ? (
+          {forYouSongs.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              {recommendations.map((song) => (
+              {forYouSongs.map((song) => (
                 <SongCard
                   key={song.id}
                   song={song}
@@ -198,6 +225,27 @@ export function HomeScreen() {
             </div>
           )}
         </section>
+
+        {Object.entries(languageRows).map(([lang, songs]) => (
+          <section key={lang} className="mb-12">
+            <h2 className="font-heading text-2xl text-text-primary mb-4">{lang}</h2>
+            {songs.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {songs.slice(0, 10).map((song) => (
+                  <SongCard
+                    key={song.id}
+                    song={song}
+                    onClick={() => navigate(`/song/${song.id}`)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-bg-card border border-border-primary rounded-lg p-8 text-center">
+                <p className="text-text-muted font-body">No {lang} songs available</p>
+              </div>
+            )}
+          </section>
+        ))}
 
         <section className="mb-12">
           <h2 className="font-heading text-2xl text-text-primary mb-4">Activity Feed</h2>

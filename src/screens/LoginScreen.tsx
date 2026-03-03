@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../lib/auth-context';
+import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 export function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
-  const navigate = useNavigate();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -16,11 +14,30 @@ export function LoginScreen() {
     setLoading(true);
 
     try {
-      await signIn(email, password);
-      navigate('/home');
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setError('Incorrect email or password.');
+        setLoading(false);
+        return;
+      }
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('onboarding_complete')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (userData?.onboarding_complete) {
+        window.location.href = '/home';
+      } else {
+        window.location.href = '/onboarding/language';
+      }
     } catch (err: any) {
-      setError(err.message || 'Login failed');
-    } finally {
+      setError('Login failed. Try again.');
       setLoading(false);
     }
   }

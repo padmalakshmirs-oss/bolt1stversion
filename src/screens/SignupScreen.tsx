@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../lib/auth-context';
+import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 export function SignupScreen() {
   const [name, setName] = useState('');
@@ -8,8 +8,6 @@ export function SignupScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signUp } = useAuth();
-  const navigate = useNavigate();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -17,11 +15,38 @@ export function SignupScreen() {
     setLoading(true);
 
     try {
-      await signUp(email, password, name);
-      navigate('/onboarding/language');
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name } },
+      });
+
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (data.user) {
+        await supabase.from('users').upsert(
+          {
+            id: data.user.id,
+            email: email,
+            name: name,
+            username: email.split('@')[0] + Math.floor(Math.random() * 999),
+            onboarding_complete: false,
+            preferred_languages: [],
+            favorite_artists: [],
+            preferred_eras: [],
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+
+        window.location.href = '/onboarding/language';
+      }
     } catch (err: any) {
-      setError(err.message || 'Signup failed');
-    } finally {
+      setError('Signup failed. Please try again.');
       setLoading(false);
     }
   }
