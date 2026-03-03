@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth-context';
 import { supabase } from '../lib/supabase';
@@ -30,6 +30,21 @@ function OnboardingLanguage() {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const check = async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from('users')
+        .select('onboarding_complete')
+        .eq('id', user.id)
+        .single();
+      if (data?.onboarding_complete === true) {
+        window.location.href = '/home';
+      }
+    };
+    check();
+  }, [user]);
 
   const toggleLanguage = (lang: string) => {
     setSelected(prev => prev.includes(lang) ? prev.filter(l => l !== lang) : [...prev, lang]);
@@ -97,6 +112,21 @@ function OnboardingEra() {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const check = async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from('users')
+        .select('onboarding_complete')
+        .eq('id', user.id)
+        .single();
+      if (data?.onboarding_complete === true) {
+        window.location.href = '/home';
+      }
+    };
+    check();
+  }, [user]);
 
   const toggleEra = (era: string) => {
     setSelected(prev => prev.includes(era) ? prev.filter(e => e !== era) : [...prev, era]);
@@ -166,6 +196,21 @@ function OnboardingDirectors() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const check = async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from('users')
+        .select('onboarding_complete')
+        .eq('id', user.id)
+        .single();
+      if (data?.onboarding_complete === true) {
+        window.location.href = '/home';
+      }
+    };
+    check();
+  }, [user]);
+
   const toggleDirector = (director: string) => {
     setSelected(prev => prev.includes(director) ? prev.filter(d => d !== director) : [...prev, director]);
   };
@@ -234,7 +279,22 @@ function OnboardingArtists() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  React.useEffect(() => {
+  useEffect(() => {
+    const check = async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from('users')
+        .select('onboarding_complete')
+        .eq('id', user.id)
+        .single();
+      if (data?.onboarding_complete === true) {
+        window.location.href = '/home';
+      }
+    };
+    check();
+  }, [user]);
+
+  useEffect(() => {
     loadArtists();
   }, []);
 
@@ -267,7 +327,8 @@ function OnboardingArtists() {
         .from('users')
         .update({ favorite_artists: selected, onboarding_complete: true })
         .eq('id', user.id);
-      navigate('/home');
+
+      window.location.href = '/home';
     } catch (err) {
       console.error(err);
     } finally {
