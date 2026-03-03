@@ -61,16 +61,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
 
     if (data.user) {
-      const { error: insertError } = await supabase.from('users').insert([
+      const { error: upsertError } = await supabase.from('users').upsert([
         {
           id: data.user.id,
           email,
           name,
-          username: email.split('@')[0] + Math.random().toString(36).substring(7),
+          username: email.split('@')[0] + Math.floor(Math.random() * 9999),
           onboarding_complete: false,
+          preferred_languages: [],
+          favorite_artists: [],
+          preferred_eras: [],
+          created_at: new Date().toISOString(),
         },
-      ]);
-      if (insertError) throw insertError;
+      ], { onConflict: 'id' });
+      if (upsertError) throw upsertError;
     }
   }
 
